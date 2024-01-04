@@ -1,6 +1,6 @@
 use std::collections::HashMap;
 
-use muda::{AboutMetadata, ContextMenu, Menu, MenuEvent, MenuId, PredefinedMenuItem, Submenu};
+use muda::{ContextMenu, IsMenuItem, Menu, MenuEvent, MenuId, Submenu};
 use winit::{
     dpi::LogicalSize,
     error::EventLoopError,
@@ -21,25 +21,54 @@ use super::input::InputManager;
 /// A dispatch map for menu items.
 /// This is a map from menu item IDs to closures that will be called when the menu item is
 /// activated.
-type DispatchMap = HashMap<MenuId, Box<dyn Fn()>>;
+pub type MenuAction = Box<dyn Fn()>;
+pub type MenuDispatchMap = HashMap<MenuId, MenuAction>;
+
+pub struct MenuItemWithAction {
+    pub menu_id: MenuId,
+    pub action: MenuAction,
+}
+pub trait MenuItemExt
+where
+    Self: IsMenuItem,
+{
+    fn with_action(&self, action: MenuAction) -> MenuItemWithAction
+    where
+        Self: Sized;
+}
+impl<T> MenuItemExt for T
+where
+    T: IsMenuItem + Sized + Clone,
+{
+    fn with_action(&self, action: MenuAction) -> MenuItemWithAction {
+        MenuItemWithAction {
+            menu_id: self.clone().into_id(),
+            action,
+        }
+    }
+}
 
 /// A builder for creating an App.
 /// This struct is used to configure an App before creating it.
 /// The `build` method will create the App.
 pub struct AppBuilder {
-    app_name: String,
     window_title: String,
     window_width: u32,
     window_height: u32,
+    menu_bar: Option<Menu>,
+    context_menu: Option<Submenu>,
+    menu_dispatch_map: MenuDispatchMap,
 }
 
 impl AppBuilder {
-    pub fn new(app_name: &str) -> Self {
+    pub fn new() -> Self {
         Self {
-            app_name: app_name.to_string(),
-            window_title: app_name.to_string(),
+            window_title: "App".to_string(),
             window_width: 320,
             window_height: 240,
+            menu_bar: None,
+            context_menu: None,
+            menu_dispatch_map: HashMap::new(),
         }
     }
 
@@ -54,13 +83,38 @@ impl AppBuilder {
         self
     }
 
+    pub fn with_menu_bar(mut self, menu_bar: Menu) -> Self {
+        self.menu_bar = Some(menu_bar);
+        self
+    }
+
+    pub fn with_context_menu(mut self, context_menu: Submenu) -> Self {
+        self.context_menu = Some(context_menu);
+        self
+    }
+
+    pub fn with_menu_actions(mut self, menu_actions: Vec<MenuItemWithAction>) -> Self {
+        for item in menu_actions {
+            self.menu_dispatch_map.insert(item.menu_id, item.action);
+        }
+        self
+    }
+
     pub fn build(self) -> Result<App, Box<dyn std::error::Error>> {
         App::new(
-            self.app_name,
             self.window_title,
             self.window_width,
             self.window_height,
+            self.menu_bar,
+            self.menu_dispatch_map,
+            self.context_menu,
         )
+    }
+}
+
+impl Default for AppBuilder {
+    fn default() -> Self {
+        Self::new()
     }
 }
 
@@ -69,9 +123,9 @@ impl AppBuilder {
 /// It also provides a callback for handling your application loop.
 pub struct App {
     pub window: Window,
-    menu_bar: Menu,
-    context_menu: Submenu,
-    menu_dispatch_map: DispatchMap,
+    menu_bar: Option<Menu>,
+    context_menu: Option<Submenu>,
+    menu_dispatch_map: MenuDispatchMap,
     event_loop: Option<EventLoop<()>>,
     input_manager: InputManager,
 }
@@ -80,13 +134,19 @@ impl App {
     /// Create new App with a menu bar.
     /// It should be called before any other menu-related functions.
     pub fn new(
-        app_name: String,
         window_title: String,
         width: u32,
         height: u32,
+        menu_bar: Option<Menu>,
+        menu_dispatch_map: MenuDispatchMap,
+        context_menu: Option<Submenu>,
     ) -> Result<Self, Box<dyn std::error::Error>> {
         let mut event_loop_builder = EventLoopBuilder::new();
-        let mut menu_bar = Self::create_menu_bar(&mut event_loop_builder)?;
+
+        if let Some(menu_bar) = menu_bar.as_ref() {
+            Self::init_menu_hooks(&mut event_loop_builder, menu_bar);
+        }
+
         let event_loop = event_loop_builder.build()?;
 
         let size = LogicalSize::new(width, height);
@@ -95,13 +155,6 @@ impl App {
             .with_inner_size(size)
             .with_min_inner_size(size)
             .build(&event_loop)?;
-
-        let menu_dispatch_map = Self::create_menu_items(&mut menu_bar, &app_name)?;
-        let context_menu = Submenu::with_items(
-            "Context",
-            true,
-            &[&PredefinedMenuItem::close_window(Some("Exit"))],
-        )?;
 
         let mut app = Self {
             window,
@@ -116,12 +169,10 @@ impl App {
         Ok(app)
     }
 
-    fn create_menu_bar(event_loop_builder: &mut EventLoopBuilder<()>) -> Result<Menu, muda::Error> {
-        let menu_bar = Menu::new();
-
+    fn init_menu_hooks(event_loop_builder: &mut EventLoopBuilder<()>, menu: &Menu) {
         #[cfg(target_os = "windows")]
         {
-            let menu_bar = menu_bar.clone();
+            let menu_bar = menu.clone();
             event_loop_builder.with_msg_hook(move |msg| {
                 use windows_sys::Win32::UI::WindowsAndMessaging::{TranslateAcceleratorW, MSG};
                 unsafe {
@@ -134,74 +185,34 @@ impl App {
 
         #[cfg(target_os = "macos")]
         event_loop_builder.with_default_menu(false);
-
-        Ok(menu_bar)
-    }
-
-    /// Creates and adds menu items to the given menu.
-    /// Returns a dispatch map for menu items for use in event handling.
-    fn create_menu_items(menu: &mut Menu, app_name: &str) -> Result<DispatchMap, muda::Error> {
-        let version = option_env!("CARGO_PKG_VERSION").map(|s| s.to_string());
-        let authors = option_env!("CARGO_PKG_AUTHORS")
-            .map(|s| s.split(':').map(|s| s.trim().to_string()).collect());
-
-        let about = PredefinedMenuItem::about(
-            None,
-            Some(AboutMetadata {
-                name: Some(app_name.to_string()),
-                version,
-                authors,
-                ..Default::default()
-            }),
-        );
-
-        #[cfg(target_os = "macos")]
-        {
-            let app_m = Submenu::new("App", true);
-            menu.append(&app_m);
-            app_m.append_items(&[
-                &about,
-                &PredefinedMenuItem::separator(),
-                &PredefinedMenuItem::quit(None),
-            ]);
-        }
-
-        let file_m = Submenu::with_items(
-            "&File",
-            true,
-            &[&PredefinedMenuItem::close_window(Some("Exit"))],
-        )?;
-        let help_m = Submenu::with_items("&Help", true, &[&about])?;
-
-        menu.append_items(&[&file_m, &help_m])?;
-
-        // Create dispatch map
-        let dispatch_map = HashMap::new();
-
-        Ok(dispatch_map)
     }
 
     /// Initialize the App
     /// This function sets up the menu bar for the given window.
     /// This function is platform-specific, and should only be called once.
     fn init(&mut self) -> Result<(), muda::Error> {
+        if self.menu_bar.is_none() {
+            return Ok(());
+        }
+
+        let menu_bar = self.menu_bar.as_ref().unwrap();
+
         #[cfg(target_os = "windows")]
         {
             use winit::raw_window_handle::*;
             if let RawWindowHandle::Win32(handle) = self.window.window_handle().unwrap().as_raw() {
-                self.menu_bar.init_for_hwnd(handle.hwnd.get())?
+                menu_bar.init_for_hwnd(handle.hwnd.get())?
             }
         }
         #[cfg(target_os = "macos")]
         {
-            self.menu_bar.init_for_nsapp()?
+            menu_bar.init_for_nsapp()?
         }
         #[cfg(target_os = "linux")]
         {
             let gtk_window = self.window.gtk_window();
             let vertical_gtk_box = self.window.default_vbox();
-            self.menu_bar
-                .init_for_gtk_window(&gtk_window, Some(&vertical_gtk_box))?
+            menu_bar.init_for_gtk_window(&gtk_window, Some(&vertical_gtk_box))?
         }
 
         Ok(())
@@ -210,28 +221,31 @@ impl App {
     /// Show the context menu for the app's window.
     /// The context menu is shown at the current mouse position.
     pub fn show_context_menu(&self) {
+        if self.context_menu.is_none() {
+            return;
+        }
+
+        let context_menu = self.context_menu.as_ref().unwrap();
+
         #[cfg(target_os = "windows")]
         {
             use winit::raw_window_handle::*;
             if let RawWindowHandle::Win32(handle) = self.window.window_handle().unwrap().as_raw() {
-                self.context_menu
-                    .show_context_menu_for_hwnd(handle.hwnd.get(), None);
+                context_menu.show_context_menu_for_hwnd(handle.hwnd.get(), None);
             }
         }
         #[cfg(target_os = "macos")]
         {
             use winit::raw_window_handle::*;
             if let RawWindowHandle::AppKit(handle) = self.window.window_handle().unwrap().as_raw() {
-                self.context_menu
-                    .show_context_menu_for_nsview(handle.ns_view.as_ptr() as _, None);
+                context_menu.show_context_menu_for_nsview(handle.ns_view.as_ptr() as _, None);
             }
         }
         #[cfg(target_os = "linux")]
         {
             let gtk_window = self.window.gtk_window();
             let vertical_gtk_box = self.window.default_vbox();
-            self.context_menu
-                .show_context_menu_for_gtk_window(&gtk_window, vertical_gtk_box);
+            context_menu.show_context_menu_for_gtk_window(&gtk_window, vertical_gtk_box);
         }
     }
 

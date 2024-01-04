@@ -1,6 +1,7 @@
 use ferro_app::{
+    muda::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu},
     winit::event::{Event, WindowEvent},
-    AppBuilder,
+    AppBuilder, MenuItemExt, MenuItemWithAction,
 };
 use pixels::{Pixels, SurfaceTexture};
 
@@ -17,9 +18,13 @@ struct World {
 }
 
 fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut app = AppBuilder::new("Minimal Pixels")
+    let mut app_menu = Menu::new();
+    let menu_actions = create_menu_items(&mut app_menu)?;
+    let mut app = AppBuilder::new()
         .with_window_title("Minimal Example - Pixels")
         .with_window_size(WIDTH, HEIGHT)
+        .with_menu_bar(app_menu)
+        .with_menu_actions(menu_actions)
         .build()?;
 
     let mut pixels = {
@@ -53,7 +58,6 @@ fn main() -> Result<(), Box<dyn std::error::Error>> {
                 if let Err(err) = pixels.render() {
                     eprintln!("pixels.render() failed: {}", err);
                     event_loop.exit();
-                    return;
                 }
             }
             _ => {}
@@ -110,4 +114,51 @@ impl World {
             pixel.copy_from_slice(&rgba);
         }
     }
+}
+
+/// Create a menu bar with the default menu items.
+fn create_menu_items(menu: &mut Menu) -> Result<Vec<MenuItemWithAction>, ferro_app::muda::Error> {
+    let version = option_env!("CARGO_PKG_VERSION").map(|s| s.to_string());
+    let authors = option_env!("CARGO_PKG_AUTHORS")
+        .map(|s| s.split(':').map(|s| s.trim().to_string()).collect());
+
+    let about = PredefinedMenuItem::about(
+        None,
+        Some(AboutMetadata {
+            name: Some("Minimal Pixels".to_string()),
+            version,
+            authors,
+            ..Default::default()
+        }),
+    );
+
+    #[cfg(target_os = "macos")]
+    {
+        let app_m = Submenu::new("App", true);
+        menu.append(&app_m);
+        app_m.append_items(&[
+            &about,
+            &PredefinedMenuItem::separator(),
+            &PredefinedMenuItem::quit(None),
+        ]);
+    }
+
+    let file_m = Submenu::with_items(
+        "&File",
+        true,
+        &[&PredefinedMenuItem::close_window(Some("Exit"))],
+    )?;
+    let open = MenuItem::new("Open", true, None);
+
+    file_m.prepend_items(&[&open])?;
+
+    let help_m = Submenu::with_items("&Help", true, &[&about])?;
+
+    menu.append_items(&[&file_m, &help_m])?;
+
+    let dispatch_map = vec![open.with_action(Box::new(|| {
+        println!("Open was clicked!");
+    }))];
+
+    Ok(dispatch_map)
 }
