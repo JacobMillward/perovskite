@@ -1,0 +1,10 @@
+[package]
+name = "minimal-pixels"
+version = "0.1.0"
+edition = "2021"
+authors = ["Jacob Millward <jacob@millward.dev>"]
+publish = false
+
+[dependencies]
+ferro-app = { path = "../.." }
+pixels = "0.13.0"

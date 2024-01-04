@@ -1,0 +1,17 @@
+[package]
+name = "ferro-app"
+version = "0.1.0"
+description = "A simple framework for building cross-platform GUI applications in Rust"
+repository = "https://github.com/JacobMillward/ferro-app"
+authors = ["Jacob Millward <jacob@millward.dev>"]
+readme = "README.md"
+edition = "2021"
+
+# See more keys and their definitions at https://doc.rust-lang.org/cargo/reference/manifest.html
+
+[dependencies]
+winit = { version = "0.29", features = ["rwh_05"] }
+muda = "0.11.2"
+
+[target.'cfg(windows)'.dependencies]
+windows-sys = "0.52.0"
