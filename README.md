@@ -26,32 +26,7 @@ sudo apt install libgtk-3-dev libxdo-dev
 
 ## Usage
 
-Here's a basic example of how to use it:
-
-```rust
-use ferro_app::AppBuilder;
-use ferro_app::input::KeyCode;
-
-fn main() {
-    let mut app = AppBuilder::new("My App")
-        .with_window_title("My App - Window Title")
-        .with_window_size(800, 600)
-        .build().expect("Failed to start app");
-
-    app.run(|event, event_loop, input| {
-
-        // Quit the app when the escape key is pressed
-        if input.is_key_pressed(KeyCode::Escape) {
-            event_loop.quit();
-            return;
-        }
-
-        // Other app rendering logic here...
-    });
-}
-```
-
-Other examples can be found in the `examples` directory.
+Examples can be found in the `examples` directory.
 
 ## License
 
