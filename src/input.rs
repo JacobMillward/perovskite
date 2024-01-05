@@ -1,110 +1,205 @@
 use std::collections::HashMap;
 
 use winit::{
-    event::ElementState,
-    keyboard::{KeyCode, PhysicalKey},
+    dpi::PhysicalPosition,
+    event::{ElementState, Event, Modifiers, MouseButton, WindowEvent},
+    keyboard::{KeyCode, ModifiersKeyState, PhysicalKey},
+    window::WindowId,
 };
 
-/// The state of a key.
+/// The state of keyboard modifiers.
+#[derive(Clone, Copy, Debug, PartialEq, Eq, Default)]
+pub struct KeyboardModifiers {
+    /// Left "shift" key.
+    pub left_shift: bool,
+    /// Right "shift" key.
+    pub right_shift: bool,
+    /// Left "alt" key.
+    pub left_alt: bool,
+    /// Right "alt" key.
+    pub right_alt: bool,
+    /// Left "control" key.
+    pub left_control: bool,
+    /// Right "control" key.
+    pub right_control: bool,
+    /// Left "super" key. This is the "windows" key on PC and "command" key on Mac.
+    pub left_super: bool,
+    /// Right "super" key. This is the "windows" key on PC and "command" key on Mac.
+    pub right_super: bool,
+}
+
+impl KeyboardModifiers {
+    fn update(&mut self, mods: &Modifiers) {
+        self.left_shift = mods.lshift_state() == ModifiersKeyState::Pressed;
+        self.right_shift = mods.rshift_state() == ModifiersKeyState::Pressed;
+        self.left_alt = mods.lalt_state() == ModifiersKeyState::Pressed;
+        self.right_alt = mods.ralt_state() == ModifiersKeyState::Pressed;
+        self.left_control = mods.lcontrol_state() == ModifiersKeyState::Pressed;
+        self.right_control = mods.rcontrol_state() == ModifiersKeyState::Pressed;
+        self.left_super = mods.lsuper_state() == ModifiersKeyState::Pressed;
+        self.right_super = mods.rsuper_state() == ModifiersKeyState::Pressed;
+    }
+}
+
+/// The state of a key or button.
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
-pub enum KeyState {
-    /// The key was pressed this frame.
+pub enum InputState {
+    /// The input was pressed this frame.
     Pressed,
-    /// The key is currently held down.
+    /// The input is currently held down.
     Down,
-    /// The key was released this frame.
+    /// The input was released this frame.
     Released,
+}
+
+impl From<ElementState> for InputState {
+    fn from(state: ElementState) -> Self {
+        match state {
+            ElementState::Pressed => Self::Pressed,
+            ElementState::Released => Self::Released,
+        }
+    }
+}
+
+#[derive(Debug, PartialEq, Eq, Hash)]
+enum InputType {
+    Key(KeyCode),
+    Mouse(MouseButton),
 }
 
 /// A helper struct for tracking keyboard input.
 /// Stores the state of each key, and provides methods for querying the state of each key.
 /// Make sure to call `handle_keyboard_event` with keyboard events from winit's event loop.
+#[derive(Debug)]
 pub struct InputManager {
-    key_map: HashMap<KeyCode, KeyState>,
+    window_id: WindowId,
+    input_map: HashMap<InputType, InputState>,
+    key_modifiers: KeyboardModifiers,
+    cursor_position: PhysicalPosition<f64>,
 }
 
 impl InputManager {
     /// Creates a new input manager.
-    pub fn new() -> Self {
+    pub(crate) fn new(window_id: WindowId) -> Self {
         Self {
-            key_map: HashMap::new(),
+            window_id,
+            input_map: HashMap::new(),
+            key_modifiers: KeyboardModifiers::default(),
+            cursor_position: PhysicalPosition::new(0.0, 0.0),
         }
     }
 
-    /// Updates the input manager with key information. Should be updated via information from
-    /// winit's event loop.
-    pub fn handle_keyboard_event(&mut self, physical_key: PhysicalKey, state: ElementState) {
-        if let PhysicalKey::Code(key_code) = physical_key {
-            match state {
-                ElementState::Pressed => {
-                    let value = self.key_map.entry(key_code).or_insert(KeyState::Released);
-                    if let KeyState::Released = value {
-                        *value = KeyState::Pressed;
-                    } else {
-                        *value = KeyState::Down;
+    /// Updates the input manager with events from winit's event loop.
+    pub(crate) fn handle_event(&mut self, event: &winit::event::Event<()>) {
+        match event {
+            Event::WindowEvent { window_id, event } if *window_id == self.window_id => {
+                match event {
+                    WindowEvent::KeyboardInput {
+                        device_id: _,
+                        event,
+                        is_synthetic: false,
+                    } if !event.repeat => {
+                        if let PhysicalKey::Code(key_code) = event.physical_key {
+                            let input = InputType::Key(key_code);
+
+                            match event.state {
+                                ElementState::Pressed => match self.input_map.get(&input) {
+                                    Some(&InputState::Released) | None => {
+                                        self.input_map.insert(input, InputState::Pressed);
+                                    }
+                                    Some(&InputState::Pressed) | Some(&InputState::Down) => {
+                                        self.input_map.insert(input, InputState::Down);
+                                    }
+                                },
+
+                                ElementState::Released => {
+                                    self.input_map.insert(input, InputState::Released);
+                                }
+                            }
+                        }
                     }
-                }
-                ElementState::Released => {
-                    self.key_map.insert(key_code, KeyState::Released);
+
+                    WindowEvent::ModifiersChanged(mods) => {
+                        self.key_modifiers.update(mods);
+                    }
+
+                    WindowEvent::CursorMoved { position, .. } => {
+                        self.cursor_position = *position;
+                    }
+
+                    WindowEvent::MouseInput { state, button, .. } => {
+                        let input = InputType::Mouse(*button);
+
+                        match state {
+                            ElementState::Pressed => match self.input_map.get(&input) {
+                                Some(&InputState::Released) | None => {
+                                    self.input_map.insert(input, InputState::Pressed);
+                                }
+                                Some(&InputState::Pressed) | Some(&InputState::Down) => {
+                                    self.input_map.insert(input, InputState::Down);
+                                }
+                            },
+                            ElementState::Released => {
+                                self.input_map.insert(input, InputState::Released);
+                            }
+                        }
+                    }
+                    _ => {}
                 }
             }
-        }
+            _ => {}
+        };
+    }
+
+    /// Updates the state of input keys. Must be called once per render frame.
+    pub(crate) fn update(&mut self) {
+        self.input_map.retain(|_, state| match state {
+            InputState::Pressed => {
+                *state = InputState::Down;
+                true
+            }
+            InputState::Released => false,
+            InputState::Down => true,
+        });
     }
 
     /// Returns true if the key was pressed this frame.
     pub fn key_pressed(&self, key_code: KeyCode) -> bool {
-        self.key_map.get(&key_code).unwrap_or(&KeyState::Released) == &KeyState::Pressed
+        self.input_map.get(&InputType::Key(key_code)) == Some(&InputState::Pressed)
     }
 
     /// Returns true if the key is currently down.
     /// Will return true for multiple frames if the key is held down, including the frame it was
     /// pressed.
     pub fn key_down(&self, key_code: KeyCode) -> bool {
-        let value = self.key_map.get(&key_code).unwrap_or(&KeyState::Released);
-        value == &KeyState::Pressed || value == &KeyState::Down
+        matches!(
+            self.input_map.get(&InputType::Key(key_code)),
+            Some(&InputState::Pressed) | Some(&InputState::Down)
+        )
     }
 
     /// Returns true if the key was released this frame.
     pub fn key_released(&self, key_code: KeyCode) -> bool {
-        self.key_map.get(&key_code).unwrap_or(&KeyState::Released) == &KeyState::Released
+        self.input_map.get(&InputType::Key(key_code)) == Some(&InputState::Released)
     }
-}
 
-impl Default for InputManager {
-    fn default() -> Self {
-        Self::new()
+    /// Returns true if the mouse button was pressed this frame.
+    pub fn mouse_pressed(&self, button: MouseButton) -> bool {
+        self.input_map.get(&InputType::Mouse(button)) == Some(&InputState::Pressed)
     }
-}
 
-#[cfg(test)]
-mod tests {
-    use super::*;
+    /// Returns true if the mouse button is currently down.
+    /// Will return true for multiple frames if the mouse button is held down, including the frame
+    /// it was pressed.
+    pub fn mouse_down(&self, button: MouseButton) -> bool {
+        matches!(
+            self.input_map.get(&InputType::Mouse(button)),
+            Some(&InputState::Pressed) | Some(&InputState::Down)
+        )
+    }
 
-    #[test]
-    fn test_handle_keyboard_event() {
-        let mut input_manager = InputManager::new();
-
-        // Verify that the key is marked as released
-        assert!(!input_manager.key_pressed(KeyCode::KeyA));
-        assert!(!input_manager.key_down(KeyCode::KeyA));
-        assert!(input_manager.key_released(KeyCode::KeyA));
-
-        // Simulate a key press event
-        input_manager
-            .handle_keyboard_event(PhysicalKey::Code(KeyCode::KeyA), ElementState::Pressed);
-
-        // Verify that the key is marked as pressed
-        assert!(input_manager.key_pressed(KeyCode::KeyA));
-        assert!(input_manager.key_down(KeyCode::KeyA));
-        assert!(!input_manager.key_released(KeyCode::KeyA));
-
-        // Simulate a key release event
-        input_manager
-            .handle_keyboard_event(PhysicalKey::Code(KeyCode::KeyA), ElementState::Released);
-
-        // Verify that the key is marked as released
-        assert!(!input_manager.key_pressed(KeyCode::KeyA));
-        assert!(!input_manager.key_down(KeyCode::KeyA));
-        assert!(input_manager.key_released(KeyCode::KeyA));
+    /// Returns true if the mouse button was released this frame.
+    pub fn mouse_released(&self, button: MouseButton) -> bool {
+        self.input_map.get(&InputType::Mouse(button)) == Some(&InputState::Released)
     }
 }

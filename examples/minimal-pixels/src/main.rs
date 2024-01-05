@@ -1,7 +1,12 @@
+use anyhow::{Context, Result};
 use ferro_app::{
+    menu::{MenuItemExt, MenuItemWithAction},
     muda::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu},
-    winit::event::{Event, WindowEvent},
-    AppBuilder, MenuItemExt, MenuItemWithAction,
+    winit::{
+        event::{Event, WindowEvent},
+        window::Window,
+    },
+    App, AppBuilder, AppRunner, RenderContext,
 };
 use pixels::{Pixels, SurfaceTexture};
 
@@ -15,55 +20,14 @@ struct World {
     box_y: i16,
     velocity_x: i16,
     velocity_y: i16,
+    pixels: Option<Pixels>,
 }
 
-fn main() -> Result<(), Box<dyn std::error::Error>> {
-    let mut app_menu = Menu::new();
-    let menu_actions = create_menu_items(&mut app_menu)?;
-    let mut app = AppBuilder::new()
-        .with_window_title("Minimal Example - Pixels")
-        .with_window_size(WIDTH, HEIGHT)
-        .with_menu_bar(app_menu)
-        .with_menu_actions(menu_actions)
-        .build()?;
+fn main() -> Result<()> {
+    let world = World::new();
+    let mut runner = AppRunner::new(world);
 
-    let mut pixels = {
-        let window_size = app.window.inner_size();
-        let surface_texture =
-            SurfaceTexture::new(window_size.width, window_size.height, &app.window);
-        Pixels::new(WIDTH, HEIGHT, surface_texture)?
-    };
-    let mut world = World::new();
-
-    app.run(|event, event_loop, _| {
-        match event {
-            Event::AboutToWait => {
-                world.draw(pixels.frame_mut());
-
-                if let Err(err) = pixels.render() {
-                    eprintln!("pixels.render() failed: {}", err);
-                    event_loop.exit();
-                    return;
-                }
-                world.update();
-            }
-            Event::WindowEvent {
-                event: WindowEvent::Resized(size),
-                ..
-            } => {
-                if let Err(err) = pixels.resize_surface(size.width, size.height) {
-                    eprintln!("pixels.resize_surface() failed: {}", err);
-                    event_loop.exit();
-                }
-                if let Err(err) = pixels.render() {
-                    eprintln!("pixels.render() failed: {}", err);
-                    event_loop.exit();
-                }
-            }
-            _ => {}
-        };
-    })
-    .expect("Failed to run event loop");
+    runner.run()?;
 
     Ok(())
 }
@@ -76,20 +40,8 @@ impl World {
             box_y: 16,
             velocity_x: 1,
             velocity_y: 1,
+            pixels: None,
         }
-    }
-
-    /// Update the `World` internal state; bounce the box around the screen.
-    fn update(&mut self) {
-        if self.box_x <= 0 || self.box_x + BOX_SIZE > WIDTH as i16 {
-            self.velocity_x *= -1;
-        }
-        if self.box_y <= 0 || self.box_y + BOX_SIZE > HEIGHT as i16 {
-            self.velocity_y *= -1;
-        }
-
-        self.box_x += self.velocity_x;
-        self.box_y += self.velocity_y;
     }
 
     /// Draw the `World` state to the frame buffer.
@@ -113,6 +65,76 @@ impl World {
 
             pixel.copy_from_slice(&rgba);
         }
+    }
+}
+
+impl App for World {
+    fn init(&mut self, builder: &mut AppBuilder) -> Result<()> {
+        let mut app_menu = Menu::new();
+        let menu_actions = create_menu_items(&mut app_menu)?;
+
+        builder
+            .with_window_title("Minimal Example - Pixels")
+            .with_window_size(WIDTH, HEIGHT)
+            .with_menu_bar(app_menu)
+            .with_menu_actions(menu_actions);
+
+        Ok(())
+    }
+
+    fn init_window(&mut self, window: &mut Window) -> Result<()> {
+        let window_size = window.inner_size();
+        let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, window);
+        self.pixels = Some(Pixels::new(WIDTH, HEIGHT, surface_texture)?);
+
+        Ok(())
+    }
+
+    fn update(&mut self, _: &mut RenderContext) -> Result<()> {
+        self.box_x += self.velocity_x;
+        self.box_y += self.velocity_y;
+
+        if self.box_x <= 0 || self.box_x + BOX_SIZE >= WIDTH as i16 {
+            self.velocity_x *= -1;
+        }
+
+        if self.box_y <= 0 || self.box_y + BOX_SIZE >= HEIGHT as i16 {
+            self.velocity_y *= -1;
+        }
+
+        Ok(())
+    }
+
+    fn render(&mut self, _: &mut RenderContext) -> Result<()> {
+        let mut pixels = self.pixels.take().unwrap();
+        self.draw(pixels.frame_mut());
+        pixels.render()?;
+        self.pixels = Some(pixels);
+
+        Ok(())
+    }
+
+    fn handle_event(&mut self, event: &Event<()>) -> Result<()> {
+        if let Event::WindowEvent {
+            event: WindowEvent::Resized(size),
+            ..
+        } = event
+        {
+            let mut pixels = self.pixels.take().unwrap();
+
+            pixels
+                .resize_surface(size.width, size.height)
+                .with_context(|| {
+                    format!(
+                        "pixels.resize_surface({}, {}) failed",
+                        size.width, size.height
+                    )
+                })?;
+
+            self.pixels = Some(pixels);
+        }
+
+        Ok(())
     }
 }
 
