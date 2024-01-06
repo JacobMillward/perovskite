@@ -1,6 +1,6 @@
 [package]
 name = "perovskite"
-version = "0.1.0"
+version = "0.2.1"
 description = "A simple framework for building cross-platform desktop apps, drawing to a pixel buffer, and handling user input."
 repository = "https://github.com/JacobMillward/perovskite"
 authors = ["Jacob Millward <jacob@millward.dev>"]
