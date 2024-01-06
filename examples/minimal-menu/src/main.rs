@@ -1,14 +1,9 @@
-use anyhow::{Context, Result};
+use anyhow::Result;
 use ferro_app::{
     menu::{MenuItemExt, MenuItemWithAction},
     muda::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu},
-    winit::{
-        event::{Event, WindowEvent},
-        window::Window,
-    },
-    App, AppBuilder, AppRunner, RenderContext,
+    App, AppSettings, RenderContext,
 };
-use pixels::{Pixels, SurfaceTexture};
 
 const WIDTH: u32 = 320;
 const HEIGHT: u32 = 240;
@@ -20,14 +15,12 @@ struct World {
     box_y: i16,
     velocity_x: i16,
     velocity_y: i16,
-    pixels: Option<Pixels>,
 }
 
 fn main() -> Result<()> {
     let world = World::new();
-    let mut runner = AppRunner::new(world);
 
-    runner.run()?;
+    App::run(world)?;
 
     Ok(())
 }
@@ -40,54 +33,23 @@ impl World {
             box_y: 16,
             velocity_x: 1,
             velocity_y: 1,
-            pixels: None,
-        }
-    }
-
-    /// Draw the `World` state to the frame buffer.
-    ///
-    /// Assumes the default texture format: `wgpu::TextureFormat::Rgba8UnormSrgb`
-    fn draw(&self, frame: &mut [u8]) {
-        for (i, pixel) in frame.chunks_exact_mut(4).enumerate() {
-            let x = (i % WIDTH as usize) as i16;
-            let y = (i / WIDTH as usize) as i16;
-
-            let inside_the_box = x >= self.box_x
-                && x < self.box_x + BOX_SIZE
-                && y >= self.box_y
-                && y < self.box_y + BOX_SIZE;
-
-            let rgba = if inside_the_box {
-                [0x5e, 0x48, 0xe8, 0xff]
-            } else {
-                [0x48, 0xb2, 0xe8, 0xff]
-            };
-
-            pixel.copy_from_slice(&rgba);
         }
     }
 }
 
 impl App for World {
-    fn init(&mut self, builder: &mut AppBuilder) -> Result<()> {
+    fn init(&mut self) -> Result<AppSettings> {
         let mut app_menu = Menu::new();
         let menu_actions = create_menu_items(&mut app_menu)?;
 
-        builder
-            .with_window_title("Minimal Example - Pixels")
-            .with_window_size(WIDTH, HEIGHT)
+        let settings = AppSettings::builder()
+            .with_window_title("Minimal Example - Pixels".to_string())
+            .with_frame_size(WIDTH, HEIGHT)
             .with_menu_bar(app_menu)
-            .with_menu_actions(menu_actions);
+            .with_menu_actions(menu_actions)
+            .build();
 
-        Ok(())
-    }
-
-    fn init_window(&mut self, window: &mut Window) -> Result<()> {
-        let window_size = window.inner_size();
-        let surface_texture = SurfaceTexture::new(window_size.width, window_size.height, window);
-        self.pixels = Some(Pixels::new(WIDTH, HEIGHT, surface_texture)?);
-
-        Ok(())
+        Ok(settings)
     }
 
     fn update(&mut self, _: &mut RenderContext) -> Result<()> {
@@ -105,34 +67,34 @@ impl App for World {
         Ok(())
     }
 
-    fn render(&mut self, _: &mut RenderContext) -> Result<()> {
-        let mut pixels = self.pixels.take().unwrap();
-        self.draw(pixels.frame_mut());
-        pixels.render()?;
-        self.pixels = Some(pixels);
-
-        Ok(())
-    }
-
-    fn handle_event(&mut self, event: &Event<()>) -> Result<()> {
-        if let Event::WindowEvent {
-            event: WindowEvent::Resized(size),
-            ..
-        } = event
+    /// Draw the `World` state to the frame buffer.
+    ///
+    /// Assumes the default texture format: `wgpu::TextureFormat::Rgba8UnormSrgb`
+    fn draw(&mut self, ctx: &mut RenderContext) -> Result<()> {
         {
-            let mut pixels = self.pixels.take().unwrap();
+            let frame = ctx.pixels_mut().frame_mut();
 
-            pixels
-                .resize_surface(size.width, size.height)
-                .with_context(|| {
-                    format!(
-                        "pixels.resize_surface({}, {}) failed",
-                        size.width, size.height
-                    )
-                })?;
+            for (i, cur_pixel) in frame.chunks_exact_mut(4).enumerate() {
+                let x = (i % WIDTH as usize) as i16;
+                let y = (i / WIDTH as usize) as i16;
 
-            self.pixels = Some(pixels);
+                let inside_the_box = x >= self.box_x
+                    && x < self.box_x + BOX_SIZE
+                    && y >= self.box_y
+                    && y < self.box_y + BOX_SIZE;
+
+                let rgba = if inside_the_box {
+                    [0x5e, 0x48, 0xe8, 0xff]
+                } else {
+                    [0x48, 0xb2, 0xe8, 0xff]
+                };
+
+                cur_pixel.copy_from_slice(&rgba);
+            }
         }
+
+        ctx.window().pre_present_notify();
+        ctx.pixels_mut().render()?;
 
         Ok(())
     }

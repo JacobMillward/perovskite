@@ -8,4 +8,3 @@ publish = false
 [dependencies]
 anyhow = "1.0.79"
 ferro-app = { path = "../.." }
-pixels = "0.13.0"

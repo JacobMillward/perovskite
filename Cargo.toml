@@ -13,6 +13,7 @@ edition = "2021"
 winit = { version = "0.29", features = ["rwh_05"] }
 muda = "0.11.2"
 anyhow = "1.0.79"
+pixels = "0.13.0"
 
 [target.'cfg(windows)'.dependencies]
 windows-sys = "0.52.0"

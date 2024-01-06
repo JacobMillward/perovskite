@@ -28,6 +28,34 @@ sudo apt install libgtk-3-dev libxdo-dev
 
 Examples can be found in the `examples` directory.
 
+```rust
+use ferro_app::App;
+
+fn main() {
+    let app = MyApp;
+    App::run(app).unwrap();
+}
+
+struct MyApp;
+impl App for MyApp {
+    fn update(&mut self, _ctx: &mut ferro_app::RenderContext) -> ferro_app::anyhow::Result<()> {
+        // Update function here
+        Ok(())
+    }
+
+    fn draw(&mut self, _ctx: &mut ferro_app::RenderContext) -> ferro_app::anyhow::Result<()> {
+        // Draw function here
+        // You can use the ctx to draw
+        // let frame = ctx.pixels_mut().frame_mut();
+        // self.draw_frame(frame);
+        // ctx.pixels_mut().render();
+
+        Ok(())
+    }
+}
+
+```
+
 ## License
 
 This project is licensed under the MIT License - see the [LICENSE](./LICENSE) file for details.
