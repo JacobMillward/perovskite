@@ -1,8 +1,8 @@
 [package]
-name = "ferro-app"
+name = "perovskite"
 version = "0.1.0"
-description = "A simple framework for building cross-platform GUI applications in Rust"
-repository = "https://github.com/JacobMillward/ferro-app"
+description = "A simple framework for building cross-platform desktop apps, drawing to a pixel buffer, and handling user input."
+repository = "https://github.com/JacobMillward/perovskite"
 authors = ["Jacob Millward <jacob@millward.dev>"]
 readme = "README.md"
 edition = "2021"

@@ -1,8 +1,8 @@
-# Ferro App
+# Perovskite
 
-Ferro App is a simple framework for building cross-platform GUI applications in Rust.
+Perovskite is a simple framework for building cross-platform GUI applications in Rust. It allows you to create a window and draw to it using the `pixels` crate. It also provides a simple way to create a menu bar using the `muda` crate.
 
-This project uses the `winit` and `muda` libraries to create a GUI application. It provides an `App` struct that you can use to create a new application with a menu bar.
+The API is heavily inspired by XNA/Monogame.
 
 ## Dependencies
 
@@ -29,7 +29,7 @@ sudo apt install libgtk-3-dev libxdo-dev
 Examples can be found in the `examples` directory.
 
 ```rust
-use ferro_app::App;
+use perovskite::App;
 
 fn main() {
     let app = MyApp;
@@ -38,12 +38,12 @@ fn main() {
 
 struct MyApp;
 impl App for MyApp {
-    fn update(&mut self, _ctx: &mut ferro_app::RenderContext) -> ferro_app::anyhow::Result<()> {
+    fn update(&mut self, _ctx: &mut perovskite::RenderContext) -> perovskite::anyhow::Result<()> {
         // Update function here
         Ok(())
     }
 
-    fn draw(&mut self, _ctx: &mut ferro_app::RenderContext) -> ferro_app::anyhow::Result<()> {
+    fn draw(&mut self, _ctx: &mut perovskite::RenderContext) -> perovskite::anyhow::Result<()> {
         // Draw function here
         // You can use the ctx to draw
         // let frame = ctx.pixels_mut().frame_mut();

@@ -530,17 +530,6 @@ dependencies = [
 ]
 
 [[package]]
-name = "ferro-app"
-version = "0.1.0"
-dependencies = [
- "anyhow",
- "muda",
- "pixels",
- "windows-sys 0.52.0",
- "winit",
-]
-
-[[package]]
 name = "field-offset"
 version = "0.3.6"
 source = "registry+https://github.com/rust-lang/crates.io-index"
@@ -1474,6 +1463,17 @@ name = "percent-encoding"
 version = "2.3.1"
 source = "registry+https://github.com/rust-lang/crates.io-index"
 checksum = "e3148f5046208a5d56bcfc03053e3ca6334e51da8dfb19b6cdc8b306fae3283e"
+
+[[package]]
+name = "perovskite"
+version = "0.1.0"
+dependencies = [
+ "anyhow",
+ "muda",
+ "pixels",
+ "windows-sys 0.52.0",
+ "winit",
+]
 
 [[package]]
 name = "pin-project-lite"
