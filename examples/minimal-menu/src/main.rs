@@ -1,5 +1,5 @@
 use anyhow::Result;
-use ferro_app::{
+use perovskite::{
     menu::{MenuItemExt, MenuItemWithAction},
     muda::{AboutMetadata, Menu, MenuItem, PredefinedMenuItem, Submenu},
     App, AppSettings, RenderContext,
@@ -101,7 +101,7 @@ impl App for World {
 }
 
 /// Create a menu bar with the default menu items.
-fn create_menu_items(menu: &mut Menu) -> Result<Vec<MenuItemWithAction>, ferro_app::muda::Error> {
+fn create_menu_items(menu: &mut Menu) -> Result<Vec<MenuItemWithAction>, perovskite::muda::Error> {
     let version = option_env!("CARGO_PKG_VERSION").map(|s| s.to_string());
     let authors = option_env!("CARGO_PKG_AUTHORS")
         .map(|s| s.split(':').map(|s| s.trim().to_string()).collect());
@@ -119,12 +119,12 @@ fn create_menu_items(menu: &mut Menu) -> Result<Vec<MenuItemWithAction>, ferro_a
     #[cfg(target_os = "macos")]
     {
         let app_m = Submenu::new("App", true);
-        menu.append(&app_m);
+        menu.append(&app_m)?;
         app_m.append_items(&[
             &about,
             &PredefinedMenuItem::separator(),
             &PredefinedMenuItem::quit(None),
-        ]);
+        ])?;
     }
 
     let file_m = Submenu::with_items(

@@ -5,7 +5,7 @@ use muda::{ContextMenu, IsMenuItem, Menu, MenuId};
 use winit::{event_loop::EventLoopBuilder, window::Window};
 
 #[cfg(target_os = "macos")]
-use winit::platform::macos::{EventLoopBuilderExtMacOS, WindowExtMacOS};
+use winit::platform::macos::EventLoopBuilderExtMacOS;
 #[cfg(target_os = "linux")]
 use winit::platform::unix::WindowExtUnix;
 #[cfg(target_os = "windows")]
@@ -43,6 +43,7 @@ where
 }
 
 /// Initialize the platform-specific menu hooks for the app's window.
+#[cfg_attr(not(target_os = "windows"), allow(unused_variables))]
 pub fn init_menu_hooks(event_loop_builder: &mut EventLoopBuilder<()>, menu: &Menu) {
     #[cfg(target_os = "windows")]
     {
@@ -63,6 +64,7 @@ pub fn init_menu_hooks(event_loop_builder: &mut EventLoopBuilder<()>, menu: &Men
 
 /// Adds a `Menu` to the given `Window`.
 /// This function is platform-specific, and should only be called once.
+#[cfg_attr(target_os = "macos", allow(unused_variables))]
 pub fn init_menu(window: &Window, menu_bar: &Menu) -> Result<()> {
     #[cfg(target_os = "windows")]
     {
@@ -73,7 +75,7 @@ pub fn init_menu(window: &Window, menu_bar: &Menu) -> Result<()> {
     }
     #[cfg(target_os = "macos")]
     {
-        menu_bar.init_for_nsapp()?
+        menu_bar.init_for_nsapp()
     }
     #[cfg(target_os = "linux")]
     {
