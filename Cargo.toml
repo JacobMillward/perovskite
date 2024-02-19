@@ -11,7 +11,7 @@ edition = "2021"
 
 [dependencies]
 winit = { version = "0.29", features = ["rwh_05"] }
-muda = "0.11.4"
+muda = "0.11.5"
 anyhow = "1.0.79"
 pixels = "0.13.0"
 
